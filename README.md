@@ -1,5 +1,8 @@
 # splunk-youtube
 Track youtube channel videos in Splunk
+## Install - directly to python env
+`pip install -r requirements.txt`
+
 ## How to run
 Create a `.env` file with:
 ```
