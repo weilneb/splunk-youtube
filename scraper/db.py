@@ -6,6 +6,11 @@ from sqlalchemy.sql import func
 Base = declarative_base()
 
 
+class Video(Base):
+    __tablename__ = "videos"
+    video_id = Column(String, primary_key=True)
+
+
 class YoutubeChannel(Base):
     __tablename__ = "channels"
 
@@ -14,10 +19,8 @@ class YoutubeChannel(Base):
     next_token = Column(String)
     next_scheduled_at = Column(DateTime, default=func.now())
 
-    # TODO: timestamp_of_last_video_downloaded
-
     def __repr__(self):
-        return f"<YoutubeChannel(channel_id='{self.channel_id}', playlist_id='{self.playlist_id}', next_token='{self.next_token}')>"
+        return f"{vars(self)}"
 
 
 def get_db_engine(path_to_db="db.sqlite"):

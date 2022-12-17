@@ -1,11 +1,12 @@
 import datetime
 import time
 from typing import Dict, List
+
 from dateutil.parser import isoparse
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from .db import YoutubeChannel
+from .db import YoutubeChannel, Video
 from .splunk_hec import send_to_splunk_hec
 
 ERROR_RETRY_TIMEOUT_SECONDS = 300
@@ -41,6 +42,12 @@ class YTScraper:
         uploads_playlist_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
         return uploads_playlist_id
 
+    def video_already_downloaded(self, video_id: str) -> bool:
+        return self.db_session.query(Video).filter_by(video_id=video_id).first() is not None
+
+    def mark_video_as_seen(self, video_id: str):
+        self.db_session.add(Video(video_id=video_id))
+
     def get_videos(self, playlist_id: str, page_token: str = None) -> (str, List[Dict]):
         request = self.youtube.playlistItems().list(
             part="snippet,contentDetails",
@@ -54,25 +61,32 @@ class YTScraper:
         return next_token, videos
 
     def scrape(self, channel: YoutubeChannel):
-
+        # a null page_token retrieves first page which contains the latest videos
         page_token = channel.next_token
         playlist_id = channel.playlist_id
-        print(f"Scraping for {playlist_id} with page_token={page_token}")
+        some_video_already_seen = False
+        print(f"Scraping for {playlist_id} with page_token={page_token}.")
         next_token, videos = self.get_videos(playlist_id=playlist_id, page_token=page_token)
         print(f"playlist_id={playlist_id}, Next token={next_token}")
         for vid in videos:
-            print(f"{vid['channelTitle']}: {vid['title']}")
+            timestamp_dt = isoparse(vid['publishedAt'])
+            vid_string = f"{vid['channelTitle']}: {vid['title']} - published at {timestamp_dt}"
+            video_id = vid['resourceId']['videoId']
+            if not self.video_already_downloaded(video_id=video_id):
+                print(f"Sending vid to splunk: {vid_string}")
+                send_to_splunk_hec(data=vid, timestamp=timestamp_dt.timestamp())
+                self.mark_video_as_seen(video_id=video_id)
+            else:
+                some_video_already_seen = True
+                print(f"Not sending vid to splunk: {vid_string}")
 
-            # TODO: send videos to Splunk via HEC
-            #  we want timestamp = when video was published
-            timestamp = isoparse(vid['publishedAt']).timestamp()
-            send_to_splunk_hec(data=vid, timestamp=timestamp)
-
-        # TODO: only update if next_token is not None
-        #  need to add check for last video received by publishedAt to prevent dupes
-        #  also.. if next_token is None, then should wait a long time for next video...
+        # If youtube API returns null nextPageToken then we've reached the end of playlist
+        # So next scrape will try to pull the latest videos
         channel.next_token = next_token
-        channel.next_scheduled_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+
+        wait_period_seconds = 60 if (next_token is None or some_video_already_seen) else 10
+        channel.next_scheduled_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=wait_period_seconds)
+        print(f"Channel updated to: {channel}")
         self.db_session.commit()
 
     def scrape_loop(self):
@@ -80,10 +94,13 @@ class YTScraper:
             channel = self.get_next_to_scrape()
             if channel is None:
                 raise RuntimeError("No channels registered to scrape.")
+            now = datetime.datetime.utcnow()
+            if now < channel.next_scheduled_at:
+                print(f"Now={now}, next scheduled at={channel.next_scheduled_at}. Sleeping...")
+                time.sleep(10)
+                continue
             try:
                 self.scrape(channel=channel)
-                print(f"Sleeping for {SECONDS_BETWEEN_API_CALLS}")
-                time.sleep(SECONDS_BETWEEN_API_CALLS)
 
             # https://github.com/googleapis/google-api-python-client/blob/main/googleapiclient/http.py#L938
             # This should handle any non-200 HTTP status codes
