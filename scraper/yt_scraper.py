@@ -84,21 +84,25 @@ class YTScraper:
         # So next scrape will try to pull the latest videos
         channel.next_token = next_token
 
-        wait_period_seconds = 60 if (next_token is None or some_video_already_seen) else 10
+        wait_period_seconds = (60 * 60) if (next_token is None or some_video_already_seen) else 10
         channel.next_scheduled_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=wait_period_seconds)
         print(f"Channel updated to: {channel}")
         self.db_session.commit()
+
+    @staticmethod
+    def seconds_to_wait(dt: datetime) -> int:
+        now = datetime.datetime.utcnow()
+        return max(0, int((dt - now).total_seconds()))
 
     def scrape_loop(self):
         while True:
             channel = self.get_next_to_scrape()
             if channel is None:
                 raise RuntimeError("No channels registered to scrape.")
-            now = datetime.datetime.utcnow()
-            if now < channel.next_scheduled_at:
-                print(f"Now={now}, next scheduled at={channel.next_scheduled_at}. Sleeping...")
-                time.sleep(10)
-                continue
+            seconds_to_sleep = self.seconds_to_wait(channel.next_scheduled_at)
+            print(f"next scheduled at={channel.next_scheduled_at}. Sleeping for {seconds_to_sleep} secs.")
+            if seconds_to_sleep > 0:
+                time.sleep(seconds_to_sleep)
             try:
                 self.scrape(channel=channel)
 

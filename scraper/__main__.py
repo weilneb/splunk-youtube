@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     api_key = os.environ['YOUTUBE_API_KEY']
     with Session(db_engine) as session:
-        scraper = YTScraper(api_key, db_session=session, api_page_size=10)
-        # scraper = YTScraper(api_key, db_session=session)
+        # scraper = YTScraper(api_key, db_session=session, api_page_size=30)
+        scraper = YTScraper(api_key, db_session=session)
         scraper.add_channel_ids(channel_ids)
         scraper.scrape_loop()

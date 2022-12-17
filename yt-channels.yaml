@@ -1,10 +1,18 @@
 ---
 channels:
-  - name: Jimmy Kim
-    channel_id: UCOU2PEQuXiz4JsfEtW3frhA
-#  - name:  Tom Scott
-#    channel_id: UCBa659QWEk1AI4Tg--mrJ2A
-#    mkbhd
-#    james hoffman
-#    swedish investor
+  - name: OfflineTV
+    channel_id: UCDK9qD5DAQML-pzrtA7A4oA
+  - name: Tom Scott
+    channel_id: UCBa659QWEk1AI4Tg--mrJ2A
+  - name: Mr Beast
+    channel_id: UCX6OQ3DkcsbYNE6H8uQQuVA
+  - name: MKBHD
+    channel_id: UCBJycsmduvYEL83R_U4JriQ
+  - name: James Hoffman
+    channel_id: UCMb0O2CdPBNi-QqPk5T3gsQ
+  - name: Answer in Progress
+    channel_id: UCqVEHtQoXHmUCfJ-9smpTSg
+  - name: Ludwig
+    channel_id: UCrPseYLGpNygVi34QpGNqpA
+
 
