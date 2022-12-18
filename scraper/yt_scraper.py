@@ -1,4 +1,5 @@
 import datetime
+import os
 import time
 from typing import Dict, List
 
@@ -10,7 +11,8 @@ from .db import YoutubeChannel, Video
 from .splunk_hec import send_to_splunk_hec
 
 ERROR_RETRY_TIMEOUT_SECONDS = 300
-SECONDS_BETWEEN_API_CALLS = 5
+SECONDS_TO_WAIT_FOR_NEW_VIDEOS = 60 * 60
+MIN_SECONDS_SLEEP_BETWEEN_API_CALLS = int(os.getenv('MIN_SECONDS_SLEEP_BETWEEN_API_CALLS', 10))
 
 
 class YTScraper:
@@ -80,11 +82,13 @@ class YTScraper:
                 some_video_already_seen = True
                 print(f"Not sending vid to splunk: {vid_string}")
 
-        # If youtube API returns null nextPageToken then we've reached the end of playlist
-        # So next scrape will try to pull the latest videos
-        channel.next_token = next_token
+        # If YouTube API returns null nextPageToken then we've reached the end of playlist
+        # So next scrape will try to pull the latest videos from first page.
+        if not some_video_already_seen:
+            channel.next_token = next_token
 
-        wait_period_seconds = (60 * 60) if (next_token is None or some_video_already_seen) else 10
+        wait_period_seconds = SECONDS_TO_WAIT_FOR_NEW_VIDEOS if (
+                next_token is None or some_video_already_seen) else MIN_SECONDS_SLEEP_BETWEEN_API_CALLS
         channel.next_scheduled_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=wait_period_seconds)
         print(f"Channel updated to: {channel}")
         self.db_session.commit()
@@ -103,6 +107,8 @@ class YTScraper:
             print(f"next scheduled at={channel.next_scheduled_at}. Sleeping for {seconds_to_sleep} secs.")
             if seconds_to_sleep > 0:
                 time.sleep(seconds_to_sleep)
+
+            seconds_sleep_before_next_scrape = MIN_SECONDS_SLEEP_BETWEEN_API_CALLS
             try:
                 self.scrape(channel=channel)
 
@@ -110,4 +116,6 @@ class YTScraper:
             # This should handle any non-200 HTTP status codes
             except HttpError as err:
                 print(f"Error: {err}")
-                time.sleep(ERROR_RETRY_TIMEOUT_SECONDS)
+                seconds_sleep_before_next_scrape = ERROR_RETRY_TIMEOUT_SECONDS
+            print(f"Sleeping for {seconds_sleep_before_next_scrape} seconds.")
+            time.sleep(seconds_sleep_before_next_scrape)
