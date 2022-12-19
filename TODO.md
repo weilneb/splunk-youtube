@@ -1,3 +1,0 @@
-- publish to Splunk HEC
-- logging
-- update readme: how to run
